@@ -29,11 +29,11 @@ private:
     
     // Reverb
     juce::dsp::Reverb reverb;
-
+    float lastRevSize { -1.0f };
+    float lastRevMix  { -1.0f };
     std::atomic<float> atomicRevSize     { 0.5f };
     std::atomic<float> atomicRevMix      { 0.0f };
     std::atomic<float> atomicDelTime     { 0.3f };
     std::atomic<float> atomicDelFeedback { 0.4f };
     std::atomic<float> atomicDelMix      { 0.0f };
-
 };

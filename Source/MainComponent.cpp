@@ -108,6 +108,7 @@ MainComponent::~MainComponent()
 
 void MainComponent::initialiseVoiceParams()
 {
+    // AMP
     juce::ADSR::Parameters params;
     params.attack  = (float) ampA.getValue();
     params.decay   = (float) ampD.getValue();
@@ -117,6 +118,7 @@ void MainComponent::initialiseVoiceParams()
         if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
             v->setAdsrParams (params);
 
+    // LFO
     for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
         if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
         {
@@ -124,6 +126,25 @@ void MainComponent::initialiseVoiceParams()
             v->setLfo1Depth ((float) lfo1.depth.getValue());
             v->setLfo1Delay ((float) lfo1.delay.getValue());
         }
+    
+    // Filter 1 env
+        for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
+            if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
+            {
+                juce::ADSR::Parameters f1p;
+                f1p.attack  = (float) filter1.envA.getValue();
+                f1p.decay   = (float) filter1.envD.getValue();
+                f1p.sustain = (float) filter1.envS.getValue();
+                f1p.release = (float) filter1.envR.getValue();
+                v->setFilter1EnvParams (f1p, (float) filter1.envAmt.getValue());
+
+                juce::ADSR::Parameters f2p;
+                f2p.attack  = (float) filter2.envA.getValue();
+                f2p.decay   = (float) filter2.envD.getValue();
+                f2p.sustain = (float) filter2.envS.getValue();
+                f2p.release = (float) filter2.envR.getValue();
+                v->setFilter2EnvParams (f2p, (float) filter2.envAmt.getValue());
+            }
 }
 
 void MainComponent::openAudioSettings()

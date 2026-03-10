@@ -67,17 +67,22 @@ void EffectsChain::process (juce::AudioBuffer<float>& buffer, int startSample, i
         right[i] = dryR + wetR * delMix;
     }
 
-    // --- Reverb ---
+    // Reverb Params
     float revSize = atomicRevSize.load();
     float revMix  = atomicRevMix.load();
 
-    juce::dsp::Reverb::Parameters reverbParams;
-    reverbParams.roomSize   = revSize;
-    reverbParams.damping    = 0.5f;
-    reverbParams.wetLevel   = revMix;
-    reverbParams.dryLevel   = 1.0f;
-    reverbParams.width      = 1.0f;
-    reverb.setParameters (reverbParams);
+    if (revSize != lastRevSize || revMix != lastRevMix)
+    {
+        lastRevSize = revSize;
+        lastRevMix  = revMix;
+        juce::dsp::Reverb::Parameters reverbParams;
+        reverbParams.roomSize   = revSize;
+        reverbParams.damping    = 0.5f;
+        reverbParams.wetLevel   = revMix;
+        reverbParams.dryLevel   = 1.0f;
+        reverbParams.width      = 1.0f;
+        reverb.setParameters (reverbParams);
+    }
 
     juce::dsp::AudioBlock<float> block (buffer, (size_t) startSample);
     block = block.getSubBlock (0, (size_t) numSamples);

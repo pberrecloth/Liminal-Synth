@@ -3,6 +3,119 @@
 #include <JuceHeader.h>
 
 //==============================================================================
+// Curved ADSR — exponential attack/decay/release, linear sustain
+// Replaces juce::ADSR with natural-feeling analogue-style curves
+//==============================================================================
+class CurvedADSR
+{
+public:
+    struct Parameters
+    {
+        float attack  { 0.1f };
+        float decay   { 0.2f };
+        float sustain { 0.7f };
+        float release { 0.4f };
+    };
+
+    void setSampleRate (double sr) { sampleRate = sr; }
+
+    void setParameters (const Parameters& p) { params = p; }
+
+    // Compatible with juce::ADSR::Parameters
+    void setParameters (const juce::ADSR::Parameters& p)
+    {
+        params.attack  = p.attack;
+        params.decay   = p.decay;
+        params.sustain = p.sustain;
+        params.release = p.release;
+    }
+
+    void noteOn()
+    {
+        stage    = Stage::Attack;
+        // Start from current level for smooth retrigger
+    }
+
+    void noteOff()
+    {
+        if (stage != Stage::Idle)
+        {
+            stage         = Stage::Release;
+            releaseLevel  = currentLevel;
+        }
+    }
+
+    void reset()
+    {
+        stage        = Stage::Idle;
+        currentLevel = 0.0f;
+    }
+
+    bool isActive() const { return stage != Stage::Idle; }
+
+    float getNextSample()
+    {
+        switch (stage)
+        {
+            case Stage::Attack:
+            {
+                float attackSamples = juce::jmax (1.0f, params.attack * (float) sampleRate);
+                // Exponential attack — fast start, slows as it approaches 1
+                currentLevel += (1.0f - currentLevel) * (1.0f - std::exp (-3.0f / attackSamples));
+                if (currentLevel >= 0.999f)
+                {
+                    currentLevel = 1.0f;
+                    stage = Stage::Decay;
+                }
+                break;
+            }
+            case Stage::Decay:
+            {
+                float decaySamples = juce::jmax (1.0f, params.decay * (float) sampleRate);
+                float target = params.sustain;
+                // Exponential decay — fast drop then levels off at sustain
+                currentLevel += (target - currentLevel) * (1.0f - std::exp (-3.0f / decaySamples));
+                if (std::abs (currentLevel - target) < 0.001f)
+                {
+                    currentLevel = target;
+                    stage = Stage::Sustain;
+                }
+                break;
+            }
+            case Stage::Sustain:
+                currentLevel = params.sustain;
+                break;
+
+            case Stage::Release:
+            {
+                float releaseSamples = juce::jmax (1.0f, params.release * (float) sampleRate);
+                // Exponential release — natural fade to silence
+                currentLevel += (0.0f - currentLevel) * (1.0f - std::exp (-3.0f / releaseSamples));
+                if (currentLevel < 0.0001f)
+                {
+                    currentLevel = 0.0f;
+                    stage = Stage::Idle;
+                }
+                break;
+            }
+            case Stage::Idle:
+                currentLevel = 0.0f;
+                break;
+        }
+        return currentLevel;
+    }
+
+private:
+    enum class Stage { Idle, Attack, Decay, Sustain, Release };
+
+    Parameters params;
+    Stage      stage        { Stage::Idle };
+    float      currentLevel { 0.0f };
+    float      releaseLevel { 0.0f };
+    double     sampleRate   { 48000.0 };
+};
+
+//==============================================================================
 class SynthSound : public juce::SynthesiserSound
 {
 public:
@@ -63,7 +176,6 @@ public:
         smoothedRes1   .reset (sampleRate, 0.05); smoothedRes1   .setCurrentAndTargetValue (0.7f);
         smoothedDrive1 .reset (sampleRate, 0.05); smoothedDrive1 .setCurrentAndTargetValue (1.0f);
 
-        
         // Filter 2
         filter2.prepare (spec);
         filter2series.prepare (spec);
@@ -77,14 +189,18 @@ public:
         smoothedRes2   .reset (sampleRate, 0.05); smoothedRes2   .setCurrentAndTargetValue (0.7f);
         smoothedDrive2 .reset (sampleRate, 0.05); smoothedDrive2 .setCurrentAndTargetValue (1.0f);
 
+        // Filter envs
+        filterEnv1.setSampleRate (sampleRate);
+        CurvedADSR::Parameters fp;
+        fp.attack = 0.1f; fp.decay = 0.2f; fp.sustain = 0.7f; fp.release = 0.4f;
+        filterEnv1.setParameters (fp);
+
         filterEnv2.setSampleRate (sampleRate);
-        juce::ADSR::Parameters f2p;
-        f2p.attack = 0.1f; f2p.decay = 0.2f; f2p.sustain = 0.7f; f2p.release = 0.4f;
-        filterEnv2.setParameters (f2p);
+        filterEnv2.setParameters (fp);
 
         // Amp ADSR
         adsr.setSampleRate (sampleRate);
-        juce::ADSR::Parameters p;
+        CurvedADSR::Parameters p;
         p.attack = 0.1f; p.decay = 0.2f; p.sustain = 0.7f; p.release = 0.4f;
         adsr.setParameters (p);
 
@@ -105,12 +221,6 @@ public:
         smoothedPanLeft3 .reset (sampleRate, 0.05); smoothedPanLeft3 .setCurrentAndTargetValue (1.0f);
         smoothedPanRight3.reset (sampleRate, 0.05); smoothedPanRight3.setCurrentAndTargetValue (1.0f);
         smoothedMorph3   .reset (sampleRate, 0.05);
-
-        // Filter env 1
-        filterEnv1.setSampleRate (sampleRate);
-        juce::ADSR::Parameters fp;
-        fp.attack = 0.1f; fp.decay = 0.2f; fp.sustain = 0.7f; fp.release = 0.4f;
-        filterEnv1.setParameters (fp);
     }
 
     //==========================================================================
@@ -147,14 +257,26 @@ public:
         smoothedPanRight3.setTargetValue (juce::jmin (1.0f, 1.0f + p));
     }
 
-    void setAdsrParams (const juce::ADSR::Parameters& params) { adsr.setParameters (params); }
+    // Amp env — accepts juce::ADSR::Parameters for compatibility with existing wiring
+    void setAdsrParams (const juce::ADSR::Parameters& params)
+    {
+        CurvedADSR::Parameters p;
+        p.attack  = params.attack;
+        p.decay   = params.decay;
+        p.sustain = params.sustain;
+        p.release = params.release;
+        adsr.setParameters (p);
+    }
+
+    // Velocity sensitivity — 0=no velocity, 1=full velocity sensitivity
+    void setVelocitySensitivity (float v) { velocitySensitivity = juce::jlimit (0.0f, 1.0f, v); }
 
     //==========================================================================
     // LFO 1
-    void setLfo1Rate  (float hz)  { lfo1Rate    = hz; }
-    void setLfo1Depth (float d) { lfo1Depth = d; DBG ("voice setLfo1Depth=" << d); }
-    void setLfo1Delay (float ms)  { lfo1DelayMs = ms; }
-    void setLfo1Shape (int shape) { lfo1Shape   = shape; }
+    void setLfo1Rate  (float hz)   { lfo1Rate    = hz; }
+    void setLfo1Depth (float d)    { lfo1Depth   = d; }
+    void setLfo1Delay (float ms)   { lfo1DelayMs = ms; }
+    void setLfo1Shape (int shape)  { lfo1Shape   = shape; }
 
     //==========================================================================
     void setTuning (int oct, int semi, float fine)
@@ -179,9 +301,13 @@ public:
     void startNote (int midiNoteNumber, float velocity,
                     juce::SynthesiserSound*, int) override
     {
+        
         currentMidiNote    = midiNoteNumber;
         currentVelocityRaw = velocity;
-        currentVelocity    = velocity;
+
+        // Velocity sensitivity — blend between fixed level and full velocity
+        currentVelocity = juce::jlimit (0.0f, 1.0f,
+            (1.0f - velocitySensitivity) + velocitySensitivity * velocity);
 
         retune (oscA, oscB, midiNoteNumber, tuningOct,  tuningSemi,  tuningFine);
         retune (oscC, oscD, midiNoteNumber, tuningOct2, tuningSemi2, tuningFine2);
@@ -190,6 +316,9 @@ public:
         adsr.reset();       adsr.noteOn();
         filterEnv1.reset(); filterEnv1.noteOn();
         filterEnv2.reset(); filterEnv2.noteOn();
+        
+        DBG ("filter1EnvAmt=" << filter1EnvAmt << " atomicFilter1Amt=" << atomicFilter1Amt.load());
+
 
         lfo1DelayCounter = 0.0f;
 
@@ -239,7 +368,7 @@ public:
             return buf;
         };
 
-        // LFO 1 — one update per block, applied before OSC render
+        // LFO 1
         float lfo1DelaySamples = (lfo1DelayMs / 1000.0f) * (float) currentSampleRate;
         float lfoMod = 0.0f;
         if (lfo1DelayCounter < lfo1DelaySamples)
@@ -265,13 +394,13 @@ public:
         auto bufF = renderOsc (oscF, isNoiseF);
 
         // Update filter envelope params from atomics
-        juce::ADSR::Parameters f1p;
+        CurvedADSR::Parameters f1p;
         f1p.attack  = atomicFilterEnvA.load(); f1p.decay   = atomicFilterEnvD.load();
         f1p.sustain = atomicFilterEnvS.load(); f1p.release = atomicFilterEnvR.load();
         filterEnv1.setParameters (f1p);
         filter1EnvAmt = atomicFilter1Amt.load();
 
-        juce::ADSR::Parameters f2p;
+        CurvedADSR::Parameters f2p;
         f2p.attack  = atomicFilterEnv2A.load(); f2p.decay   = atomicFilterEnv2D.load();
         f2p.sustain = atomicFilterEnv2S.load(); f2p.release = atomicFilterEnv2R.load();
         filterEnv2.setParameters (f2p);
@@ -289,7 +418,7 @@ public:
         juce::AudioBuffer<float> tempBuffer (1, numSamples);
         auto* out = tempBuffer.getWritePointer (0);
 
-        // Resonance — once per block, not per sample
+        // Resonance — once per block
         float res1 = smoothedRes1.getCurrentValue(); smoothedRes1.skip (numSamples);
         float res2 = smoothedRes2.getCurrentValue(); smoothedRes2.skip (numSamples);
         filter1.setResonance       (res1);
@@ -297,12 +426,10 @@ public:
         filter2.setResonance       (res2);
         filter2series.setResonance (res2);
 
-        // maxCutoff — once per block
         float maxCutoff = (float)(currentSampleRate * 0.49);
 
         for (int i = 0; i < numSamples; ++i)
         {
-            // Morph each OSC pair
             float m1 = smoothedMorph .getNextValue();
             float m2 = smoothedMorph2.getNextValue();
             float m3 = smoothedMorph3.getNextValue();
@@ -311,36 +438,30 @@ public:
             float osc2s = sC[i] * (1.0f - m2) + sD[i] * m2;
             float osc3s = sE[i] * (1.0f - m3) + sF[i] * m3;
 
-            // Mix OSCs by gain
             float g1 = smoothedGain .getNextValue();
             float g2 = smoothedGain2.getNextValue();
             float g3 = smoothedGain3.getNextValue();
             float mixed = osc1s * g1 + osc2s * g2 + osc3s * g3;
 
-            // Drive
             float drive = smoothedDrive1.getNextValue();
             mixed = std::tanh (mixed * drive) / std::tanh (drive);
 
-            // Filter cutoffs with per-sample smoothing + envelope
             float envMod1 = filterEnv1.getNextSample() * filter1EnvAmt * 20000.0f;
             float envMod2 = filterEnv2.getNextSample() * filter2EnvAmt * 20000.0f;
             float cutoff1 = juce::jlimit (80.0f, maxCutoff, smoothedCutoff1.getNextValue() + envMod1);
             float cutoff2 = juce::jlimit (80.0f, maxCutoff, smoothedCutoff2.getNextValue() + envMod2);
 
-            // Parallel path
             filter1.setCutoffFrequency (cutoff1);
             filter2.setCutoffFrequency (cutoff2);
             float f1out       = filter1.processSample (0, mixed);
             float f2out       = filter2.processSample (0, mixed);
             float parallelOut = (f1out + f2out) * 0.5f;
 
-            // Series path
             filter1series.setCutoffFrequency (cutoff1);
             filter2series.setCutoffFrequency (cutoff2);
             float seriesOut = filter1series.processSample (0, mixed);
             seriesOut       = filter2series.processSample (0, seriesOut);
 
-            // Amp ADSR per-sample
             float env = adsr.getNextSample();
 
             out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * env;
@@ -464,7 +585,7 @@ private:
     }
 
     //==========================================================================
-    // LFO 1 — free-running, pitch destination
+    // LFO 1
     float lfo1Phase        { juce::Random::getSystemRandom().nextFloat()
                              * juce::MathConstants<float>::twoPi };
     float lfo1Rate         { 1.0f };
@@ -478,16 +599,16 @@ private:
         float out = 0.0f;
         switch (lfo1Shape)
         {
-            case 0: out = std::sin (lfo1Phase); break;   // Sine
-            case 1:                                       // Triangle
+            case 0: out = std::sin (lfo1Phase); break;
+            case 1:
                 out = (lfo1Phase < juce::MathConstants<float>::pi)
                     ? (lfo1Phase / juce::MathConstants<float>::pi) * 2.0f - 1.0f
                     : 1.0f - ((lfo1Phase - juce::MathConstants<float>::pi)
                               / juce::MathConstants<float>::pi) * 2.0f;
                 break;
-            case 2: out = (lfo1Phase < juce::MathConstants<float>::pi) ? 1.0f : -1.0f; break; // Square
-            case 3: out = (lfo1Phase / juce::MathConstants<float>::twoPi) * 2.0f - 1.0f; break; // Saw up
-            case 4: out = 1.0f - (lfo1Phase / juce::MathConstants<float>::twoPi) * 2.0f; break; // Saw down
+            case 2: out = (lfo1Phase < juce::MathConstants<float>::pi) ? 1.0f : -1.0f; break;
+            case 3: out = (lfo1Phase / juce::MathConstants<float>::twoPi) * 2.0f - 1.0f; break;
+            case 4: out = 1.0f - (lfo1Phase / juce::MathConstants<float>::twoPi) * 2.0f; break;
             default: out = std::sin (lfo1Phase); break;
         }
         lfo1Phase += (juce::MathConstants<float>::twoPi * lfo1Rate * (float) numSamples)
@@ -504,24 +625,21 @@ private:
     juce::dsp::Oscillator<float> oscC, oscD;
     juce::dsp::Oscillator<float> oscE, oscF;
     juce::dsp::Gain<float>       gain;
-    juce::ADSR                   adsr;
+    CurvedADSR                   adsr;        // ← was juce::ADSR
     juce::Random                 random;
 
     bool isNoiseA { false }, isNoiseB { false };
     bool isNoiseC { false }, isNoiseD { false };
     bool isNoiseE { false }, isNoiseF { false };
 
-    float currentVelocity    { 0.0f };
-    float currentVelocityRaw { 0.0f };
-    int   currentMidiNote    { 69 };
+    float currentVelocity       { 0.7f };
+    float currentVelocityRaw    { 0.0f };
+    float velocitySensitivity   { 0.7f };  // default — moderate sensitivity
+    int   currentMidiNote       { 69 };
 
-    // OSC 1 smoothing
+    // OSC smoothing
     juce::LinearSmoothedValue<float> smoothedGain, smoothedPanLeft, smoothedPanRight, smoothedMorph;
-
-    // OSC 2 smoothing
     juce::LinearSmoothedValue<float> smoothedGain2, smoothedPanLeft2, smoothedPanRight2, smoothedMorph2;
-
-    // OSC 3 smoothing
     juce::LinearSmoothedValue<float> smoothedGain3, smoothedPanLeft3, smoothedPanRight3, smoothedMorph3;
 
     // Tuning
@@ -529,27 +647,27 @@ private:
     int   tuningOct2 { 0 }, tuningSemi2 { 0 }; float tuningFine2 { 0.0f };
     int   tuningOct3 { 0 }, tuningSemi3 { 0 }; float tuningFine3 { 0.0f };
 
-    // Filter 1 — parallel instance + series instance
+    // Filter 1
     juce::dsp::StateVariableTPTFilter<float> filter1;
     juce::dsp::StateVariableTPTFilter<float> filter1series;
     juce::LinearSmoothedValue<float>         smoothedCutoff1, smoothedRes1, smoothedDrive1;
     float              filter1Cutoff   { 20000.0f };
     float              filter1Keytrack { 0.0f };
     float              filter1Velocity { 0.0f };
-    juce::ADSR         filterEnv1;
+    CurvedADSR         filterEnv1;            // ← was juce::ADSR
     float              filter1EnvAmt   { 0.0f };
     std::atomic<float> atomicFilterEnvA { 0.1f }, atomicFilterEnvD { 0.2f };
     std::atomic<float> atomicFilterEnvS { 0.7f }, atomicFilterEnvR { 0.4f };
     std::atomic<float> atomicFilter1Amt { 0.0f };
 
-    // Filter 2 — parallel instance + series instance
+    // Filter 2
     juce::dsp::StateVariableTPTFilter<float> filter2;
     juce::dsp::StateVariableTPTFilter<float> filter2series;
     juce::LinearSmoothedValue<float>         smoothedCutoff2, smoothedRes2, smoothedDrive2;
     float              filter2Cutoff   { 20000.0f };
     float              filter2Keytrack { 0.0f };
     float              filter2Velocity { 0.0f };
-    juce::ADSR         filterEnv2;
+    CurvedADSR         filterEnv2;            // ← was juce::ADSR
     float              filter2EnvAmt   { 0.0f };
     std::atomic<float> atomicFilterEnv2A { 0.1f }, atomicFilterEnv2D { 0.2f };
     std::atomic<float> atomicFilterEnv2S { 0.7f }, atomicFilterEnv2R { 0.4f };
