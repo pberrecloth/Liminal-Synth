@@ -5,8 +5,6 @@ AudioEngine::AudioEngine() {}
 void AudioEngine::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
     if (sampleRate <= 0) return;  // ← GUARD
-    DBG ("prepareToPlay sampleRate=" << sampleRate);
-    
     midiCollector.reset (sampleRate);
        
     synthesiser.setCurrentPlaybackSampleRate (sampleRate);
@@ -28,6 +26,7 @@ void AudioEngine::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 
     synthesiser.addSound (new SynthSound());
 
+    // Prepare Filters
     juce::dsp::ProcessSpec filter3Spec;
     filter3Spec.sampleRate       = sampleRate;
     filter3Spec.maximumBlockSize = (juce::uint32) samplesPerBlockExpected;

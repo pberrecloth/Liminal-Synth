@@ -13,8 +13,13 @@ public:
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override
     {
         engine.prepareToPlay (samplesPerBlockExpected, sampleRate);
+        if (!voiceParamsInitialised)
+        {
+            initialiseVoiceParams();
+            voiceParamsInitialised = true;
+        }
     }
-
+    
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override
     {
         engine.getNextAudioBlock (bufferToFill);
@@ -166,5 +171,8 @@ private:
     void setupAmpWiring();      // ← NEW
     void setupLfoWiring();
 
+    void initialiseVoiceParams();
+    bool voiceParamsInitialised { false };
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

@@ -107,6 +107,28 @@ void MainComponent::openAudioSettings()
     o.launchAsync();
 }
 
+void MainComponent::initialiseVoiceParams()
+{
+    // Amp env
+    juce::ADSR::Parameters params;
+    params.attack  = (float) ampA.getValue();
+    params.decay   = (float) ampD.getValue();
+    params.sustain = (float) ampS.getValue();
+    params.release = (float) ampR.getValue();
+    for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
+        if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
+            v->setAdsrParams (params);
+
+    // LFO 1
+    for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
+        if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
+        {
+            v->setLfo1Rate  ((float) lfo1.rate .getValue());
+            v->setLfo1Depth ((float) lfo1.depth.getValue());
+            v->setLfo1Delay ((float) lfo1.delay.getValue());
+        }
+}
+
 void MainComponent::openMidiSettings()
 {
     auto* selector = new juce::AudioDeviceSelectorComponent (
@@ -198,3 +220,4 @@ void MainComponent::paint (juce::Graphics& g)
     int bottomY = juce::jmax (col1Y + matH + kPad, col2Y);
     drawPanel (g, { kPad, bottomY, getWidth() - kPad * 2, kFxH }, "EFFECTS");
 }
+
