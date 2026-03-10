@@ -4,29 +4,33 @@ AudioEngine::AudioEngine() {}
 
 void AudioEngine::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
-    if (sampleRate <= 0) return;  // ← GUARD
-    midiCollector.reset (sampleRate);
-       
+    if (sampleRate <= 0) return;
+    DBG ("prepareToPlay #" << ++callCount << " sampleRate=" << sampleRate);
+
     synthesiser.setCurrentPlaybackSampleRate (sampleRate);
-    
+
     smoothedMasterLeft .reset (sampleRate, 0.2);
     smoothedMasterRight.reset (sampleRate, 0.2);
     smoothedMasterLeft .setCurrentAndTargetValue (0.8f);
     smoothedMasterRight.setCurrentAndTargetValue (0.8f);
 
-    synthesiser.clearVoices();
-    synthesiser.clearSounds();
-
-    for (int i = 0; i < 8; ++i)
+    if (synthesiser.getNumVoices() == 0)
     {
-        auto* voice = new SynthVoice();
-        voice->prepareVoice (sampleRate, samplesPerBlockExpected);
-        synthesiser.addVoice (voice);
+        for (int i = 0; i < 8; ++i)
+        {
+            auto* voice = new SynthVoice();
+            voice->prepareVoice (sampleRate, samplesPerBlockExpected);
+            synthesiser.addVoice (voice);
+        }
+        synthesiser.addSound (new SynthSound());
+    }
+    else
+    {
+        for (int i = 0; i < synthesiser.getNumVoices(); ++i)
+            if (auto* v = dynamic_cast<SynthVoice*> (synthesiser.getVoice (i)))
+                v->prepareVoice (sampleRate, samplesPerBlockExpected);
     }
 
-    synthesiser.addSound (new SynthSound());
-
-    // Prepare Filters
     juce::dsp::ProcessSpec filter3Spec;
     filter3Spec.sampleRate       = sampleRate;
     filter3Spec.maximumBlockSize = (juce::uint32) samplesPerBlockExpected;
@@ -37,7 +41,7 @@ void AudioEngine::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
     filter3.setResonance (0.7f);
 
     effects.prepare (sampleRate, samplesPerBlockExpected);
-    
+
     isReady = true;
 }
 
@@ -48,11 +52,15 @@ void AudioEngine::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferT
         bufferToFill.clearActiveBufferRegion();
         return;
     }
-    
+
     bufferToFill.clearActiveBufferRegion();
 
+    // Grab incoming MIDI under lock, then release immediately
     juce::MidiBuffer midiBuffer;
-    midiCollector.removeNextBlockOfMessages (midiBuffer, bufferToFill.numSamples);
+    {
+        const juce::ScopedLock sl (midiLock);
+        midiBuffer.swapWith (incomingMidi);
+    }
 
     synthesiser.renderNextBlock (*bufferToFill.buffer,
                                   midiBuffer,

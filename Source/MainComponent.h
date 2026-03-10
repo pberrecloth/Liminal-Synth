@@ -4,7 +4,8 @@
 #include "SynthVoice.h"
 #include "AudioEngine.h"
 
-class MainComponent : public juce::AudioAppComponent
+class MainComponent : public juce::AudioAppComponent,
+                      public juce::MidiInputCallback
 {
 public:
     MainComponent();
@@ -19,7 +20,7 @@ public:
             voiceParamsInitialised = true;
         }
     }
-    
+
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override
     {
         engine.getNextAudioBlock (bufferToFill);
@@ -28,6 +29,12 @@ public:
     void releaseResources() override
     {
         engine.releaseResources();
+    }
+
+    // Direct MIDI callback — fires immediately on MIDI arrival
+    void handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& message) override
+    {
+        engine.addMidiMessage (message);
     }
 
     void paint (juce::Graphics& g) override;
@@ -168,11 +175,11 @@ private:
 
     void setupOscWiring();
     void setupFilterWiring();
-    void setupAmpWiring();      // ← NEW
+    void setupAmpWiring();
     void setupLfoWiring();
 
     void initialiseVoiceParams();
     bool voiceParamsInitialised { false };
-    
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
