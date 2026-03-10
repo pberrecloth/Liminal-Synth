@@ -5,7 +5,7 @@ AudioEngine::AudioEngine() {}
 void AudioEngine::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
     if (sampleRate <= 0) return;
-    DBG ("prepareToPlay #" << ++callCount << " sampleRate=" << sampleRate);
+    DBG ("prepareToPlay #" << ++callCount << " sr=" << sampleRate << " buf=" << samplesPerBlockExpected);
 
     synthesiser.setCurrentPlaybackSampleRate (sampleRate);
 
@@ -16,7 +16,7 @@ void AudioEngine::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 
     if (synthesiser.getNumVoices() == 0)
     {
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < 8; ++i) 
         {
             auto* voice = new SynthVoice();
             voice->prepareVoice (sampleRate, samplesPerBlockExpected);

@@ -289,58 +289,62 @@ public:
         juce::AudioBuffer<float> tempBuffer (1, numSamples);
         auto* out = tempBuffer.getWritePointer (0);
 
+        // Resonance — once per block, not per sample
+        float res1 = smoothedRes1.getCurrentValue(); smoothedRes1.skip (numSamples);
+        float res2 = smoothedRes2.getCurrentValue(); smoothedRes2.skip (numSamples);
+        filter1.setResonance       (res1);
+        filter1series.setResonance (res1);
+        filter2.setResonance       (res2);
+        filter2series.setResonance (res2);
+
+        // maxCutoff — once per block
+        float maxCutoff = (float)(currentSampleRate * 0.49);
+
         for (int i = 0; i < numSamples; ++i)
-                {
-                    // Morph each OSC pair
-                    float m1 = smoothedMorph .getNextValue();
-                    float m2 = smoothedMorph2.getNextValue();
-                    float m3 = smoothedMorph3.getNextValue();
+        {
+            // Morph each OSC pair
+            float m1 = smoothedMorph .getNextValue();
+            float m2 = smoothedMorph2.getNextValue();
+            float m3 = smoothedMorph3.getNextValue();
 
-                    float osc1s = sA[i] * (1.0f - m1) + sB[i] * m1;
-                    float osc2s = sC[i] * (1.0f - m2) + sD[i] * m2;
-                    float osc3s = sE[i] * (1.0f - m3) + sF[i] * m3;
+            float osc1s = sA[i] * (1.0f - m1) + sB[i] * m1;
+            float osc2s = sC[i] * (1.0f - m2) + sD[i] * m2;
+            float osc3s = sE[i] * (1.0f - m3) + sF[i] * m3;
 
-                    // Mix OSCs by gain
-                    float g1 = smoothedGain .getNextValue();
-                    float g2 = smoothedGain2.getNextValue();
-                    float g3 = smoothedGain3.getNextValue();
-                    float mixed = osc1s * g1 + osc2s * g2 + osc3s * g3;
+            // Mix OSCs by gain
+            float g1 = smoothedGain .getNextValue();
+            float g2 = smoothedGain2.getNextValue();
+            float g3 = smoothedGain3.getNextValue();
+            float mixed = osc1s * g1 + osc2s * g2 + osc3s * g3;
 
-                    // Drive
-                    float drive = smoothedDrive1.getNextValue();
-                    mixed = std::tanh (mixed * drive) / std::tanh (drive);
+            // Drive
+            float drive = smoothedDrive1.getNextValue();
+            mixed = std::tanh (mixed * drive) / std::tanh (drive);
 
-                    // Filter cutoffs with per-sample smoothing + envelope
-                    float envMod1   = filterEnv1.getNextSample() * filter1EnvAmt * 20000.0f;
-                    float envMod2   = filterEnv2.getNextSample() * filter2EnvAmt * 20000.0f;
-                    float maxCutoff = (float)(currentSampleRate * 0.49);
-                    float cutoff1   = juce::jlimit (80.0f, maxCutoff, smoothedCutoff1.getNextValue() + envMod1);
-                    float cutoff2   = juce::jlimit (80.0f, maxCutoff, smoothedCutoff2.getNextValue() + envMod2);
-                    float res1      = smoothedRes1.getNextValue();
-                    float res2      = smoothedRes2.getNextValue();
+            // Filter cutoffs with per-sample smoothing + envelope
+            float envMod1 = filterEnv1.getNextSample() * filter1EnvAmt * 20000.0f;
+            float envMod2 = filterEnv2.getNextSample() * filter2EnvAmt * 20000.0f;
+            float cutoff1 = juce::jlimit (80.0f, maxCutoff, smoothedCutoff1.getNextValue() + envMod1);
+            float cutoff2 = juce::jlimit (80.0f, maxCutoff, smoothedCutoff2.getNextValue() + envMod2);
 
-                    // Parallel path
-                    filter1.setCutoffFrequency (cutoff1);
-                    filter1.setResonance (res1);
-                    filter2.setCutoffFrequency (cutoff2);
-                    filter2.setResonance (res2);
-                    float f1out       = filter1.processSample (0, mixed);
-                    float f2out       = filter2.processSample (0, mixed);
-                    float parallelOut = (f1out + f2out) * 0.5f;
+            // Parallel path
+            filter1.setCutoffFrequency (cutoff1);
+            filter2.setCutoffFrequency (cutoff2);
+            float f1out       = filter1.processSample (0, mixed);
+            float f2out       = filter2.processSample (0, mixed);
+            float parallelOut = (f1out + f2out) * 0.5f;
 
-                    // Series path
-                    filter1series.setCutoffFrequency (cutoff1);
-                    filter1series.setResonance (res1);
-                    filter2series.setCutoffFrequency (cutoff2);
-                    filter2series.setResonance (res2);
-                    float seriesOut = filter1series.processSample (0, mixed);
-                    seriesOut       = filter2series.processSample (0, seriesOut);
+            // Series path
+            filter1series.setCutoffFrequency (cutoff1);
+            filter2series.setCutoffFrequency (cutoff2);
+            float seriesOut = filter1series.processSample (0, mixed);
+            seriesOut       = filter2series.processSample (0, seriesOut);
 
-                    // Amp ADSR per-sample
-                    float env = adsr.getNextSample();
+            // Amp ADSR per-sample
+            float env = adsr.getNextSample();
 
-                    out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * env;
-                }
+            out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * env;
+        }
 
         // Pan and write
         if (buffer.getNumChannels() >= 2)

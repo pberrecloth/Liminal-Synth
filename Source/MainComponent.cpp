@@ -4,6 +4,13 @@ MainComponent::MainComponent()
 {
     setSize (1200, 900);
 
+    // Set up device FIRST before starting audio
+    /*
+    auto setup = deviceManager.getAudioDeviceSetup();
+    setup.bufferSize = 128;
+    setup.sampleRate = 48000.0;
+    deviceManager.setAudioDeviceSetup (setup, true);*/
+    
     // Audio FIRST
     if (juce::RuntimePermissions::isRequired (juce::RuntimePermissions::recordAudio)
         && ! juce::RuntimePermissions::isGranted (juce::RuntimePermissions::recordAudio))
@@ -16,11 +23,7 @@ MainComponent::MainComponent()
         setAudioChannels (2, 2);
     }
 
-    auto setup = deviceManager.getAudioDeviceSetup();
-    setup.bufferSize = 256;
-    setup.sampleRate = 48000.0;
-    deviceManager.setAudioDeviceSetup (setup, true);
-
+    
     // Direct MIDI — register this class as the MIDI callback
     deviceManager.addMidiInputDeviceCallback ({}, this);
     
