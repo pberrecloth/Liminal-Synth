@@ -4,26 +4,23 @@ MainComponent::MainComponent()
 {
     setSize (1200, 900);
 
-      // Audio FIRST
-      if (juce::RuntimePermissions::isRequired (juce::RuntimePermissions::recordAudio)
-          && ! juce::RuntimePermissions::isGranted (juce::RuntimePermissions::recordAudio))
-      {
-          juce::RuntimePermissions::request (juce::RuntimePermissions::recordAudio,
-              [&] (bool granted) { setAudioChannels (granted ? 2 : 0, 2); });
-      }
-      else
-      {
-          setAudioChannels (2, 2);
-      }
+    // Audio FIRST
+    if (juce::RuntimePermissions::isRequired (juce::RuntimePermissions::recordAudio)
+        && ! juce::RuntimePermissions::isGranted (juce::RuntimePermissions::recordAudio))
+    {
+        juce::RuntimePermissions::request (juce::RuntimePermissions::recordAudio,
+            [&] (bool granted) { setAudioChannels (granted ? 2 : 0, 2); });
+    }
+    else
+    {
+        setAudioChannels (2, 2);
+    }
 
-      auto setup = deviceManager.getAudioDeviceSetup();
-      setup.bufferSize = 512;
-      deviceManager.setAudioDeviceSetup (setup, true);
+    auto setup = deviceManager.getAudioDeviceSetup();
+    setup.bufferSize = 512;
+    deviceManager.setAudioDeviceSetup (setup, true);
 
-      deviceManager.addMidiInputDeviceCallback ({}, &engine.midiCollector);
-
-    
-    
+    deviceManager.addMidiInputDeviceCallback ({}, &engine.midiCollector);
 
     // Top bar
     patchNameLabel.setText ("Init Patch", juce::dontSendNotification);
@@ -48,39 +45,8 @@ MainComponent::MainComponent()
 
     setupOscWiring();
     setupFilterWiring();
-    setupLfoWiring(); 
-
-    // Amp Env
-    setupSlider (ampA); setupLabel (ampAL, "A");
-    setupSlider (ampD); setupLabel (ampDL, "D");
-    setupSlider (ampS); setupLabel (ampSL, "S");
-    setupSlider (ampR); setupLabel (ampRL, "R");
-    ampA.setRange (0.005, 5.0);
-    ampD.setRange (0.001, 5.0);
-    ampS.setRange (0.0,   1.0);
-    ampR.setRange (0.02,  5.0);
-
-    auto updateAdsr = [this]()
-    {
-        juce::ADSR::Parameters params;
-        params.attack  = (float) ampA.getValue();
-        params.decay   = (float) ampD.getValue();
-        params.sustain = (float) ampS.getValue();
-        params.release = (float) ampR.getValue();
-        for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
-            if (auto* voice = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
-                voice->setAdsrParams (params);
-    };
-    ampA.onValueChange = updateAdsr;
-    ampD.onValueChange = updateAdsr;
-    ampS.onValueChange = updateAdsr;
-    ampR.onValueChange = updateAdsr;
-
-    // Env 3
-    setupSlider (env3A); setupLabel (env3AL, "A");
-    setupSlider (env3D); setupLabel (env3DL, "D");
-    setupSlider (env3S); setupLabel (env3SL, "S");
-    setupSlider (env3R); setupLabel (env3RL, "R");
+    setupAmpWiring();       // ← replaces inline amp env block
+    setupLfoWiring();
 
     // LFOs
     setupLfo (lfo1);
@@ -116,8 +82,6 @@ MainComponent::MainComponent()
     delTime    .onValueChange = [this]() { engine.effects.setDelTime     ((float) delTime    .getValue()); };
     delFeedback.onValueChange = [this]() { engine.effects.setDelFeedback ((float) delFeedback.getValue()); };
     delMix     .onValueChange = [this]() { engine.effects.setDelMix      ((float) delMix     .getValue()); };
-
-   
 }
 
 MainComponent::~MainComponent()

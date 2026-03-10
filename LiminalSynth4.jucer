@@ -4,6 +4,7 @@
               addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1">
   <MAINGROUP id="jHo3y3" name="LiminalSynth4">
     <GROUP id="{BC446A1C-6140-53E1-6661-05247B527D51}" name="Source">
+      <FILE id="sObVfQ" name="AmpWiring.cpp" compile="1" resource="0" file="Source/AmpWiring.cpp"/>
       <FILE id="qbVYH1" name="LFOWiring.cpp" compile="1" resource="0" file="Source/LFOWiring.cpp"/>
       <FILE id="cDcXfc" name="Styles.h" compile="0" resource="0" file="Source/Styles.h"/>
       <FILE id="ix4jWV" name="MainLayout.cpp" compile="1" resource="0" file="Source/MainLayout.cpp"/>
