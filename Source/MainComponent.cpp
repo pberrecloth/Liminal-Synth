@@ -16,8 +16,10 @@ MainComponent::MainComponent()
         setAudioChannels (2, 2);
     }
 
+    // Set sample rate
     auto setup = deviceManager.getAudioDeviceSetup();
     setup.bufferSize = 512;
+    setup.sampleRate = 48000.0;
     deviceManager.setAudioDeviceSetup (setup, true);
 
     deviceManager.addMidiInputDeviceCallback ({}, &engine.midiCollector);
