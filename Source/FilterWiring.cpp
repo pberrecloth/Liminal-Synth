@@ -56,10 +56,10 @@ void MainComponent::setupFilterWiring()
     filter1.keytrack.setRange (0.0,  1.0);     filter1.keytrack.setValue (0.0);
     filter1.velocity.setRange (0.0,  1.0);     filter1.velocity.setValue (0.0);
 
-    filter1.envA.setRange (0.005, 5.0); filter1.envA.setSkewFactorFromMidPoint (0.3); filter1.envA.setValue (0.1);
-    filter1.envD.setRange (0.001, 5.0); filter1.envD.setSkewFactorFromMidPoint (0.3); filter1.envD.setValue (0.2);
-    filter1.envS.setRange (0.0,   1.0);                                               filter1.envS.setValue (0.7);
-    filter1.envR.setRange (0.02,  5.0); filter1.envR.setSkewFactorFromMidPoint (0.5); filter1.envR.setValue (0.4);
+    filter1.envA.setRange (0.0, 5.0); filter1.envA.setSkewFactorFromMidPoint (0.3); filter1.envA.setValue (0.1);
+    filter1.envD.setRange (0.0, 5.0); filter1.envD.setSkewFactorFromMidPoint (0.3); filter1.envD.setValue (0.2);
+    filter1.envS.setRange (0.0, 1.0);                                                filter1.envS.setValue (0.7);
+    filter1.envR.setRange (0.0, 5.0); filter1.envR.setSkewFactorFromMidPoint (0.5); filter1.envR.setValue (0.4);
     filter1.envAmt.setRange (-1.0, 1.0);                                              filter1.envAmt.setValue (0.0);
 
     auto updateFilter1 = [this]()
@@ -121,10 +121,10 @@ void MainComponent::setupFilterWiring()
     filter2.keytrack.setRange (0.0,  1.0);     filter2.keytrack.setValue (0.0);
     filter2.velocity.setRange (0.0,  1.0);     filter2.velocity.setValue (0.0);
 
-    filter2.envA.setRange (0.005, 5.0); filter2.envA.setSkewFactorFromMidPoint (0.3); filter2.envA.setValue (0.1);
-    filter2.envD.setRange (0.001, 5.0); filter2.envD.setSkewFactorFromMidPoint (0.3); filter2.envD.setValue (0.2);
-    filter2.envS.setRange (0.0,   1.0);                                               filter2.envS.setValue (0.7);
-    filter2.envR.setRange (0.02,  5.0); filter2.envR.setSkewFactorFromMidPoint (0.5); filter2.envR.setValue (0.4);
+    filter2.envA.setRange (0.0, 5.0); filter2.envA.setSkewFactorFromMidPoint (0.3); filter2.envA.setValue (0.1);
+    filter2.envD.setRange (0.0, 5.0); filter2.envD.setSkewFactorFromMidPoint (0.3); filter2.envD.setValue (0.2);
+    filter2.envS.setRange (0.0, 1.0);                                                filter2.envS.setValue (0.7);
+    filter2.envR.setRange (0.0, 5.0); filter2.envR.setSkewFactorFromMidPoint (0.5); filter2.envR.setValue (0.4);
     filter2.envAmt.setRange (-1.0, 1.0);                                              filter2.envAmt.setValue (0.0);
 
     auto updateFilter2 = [this]()

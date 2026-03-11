@@ -19,10 +19,10 @@ void MainComponent::setupAmpWiring()
     setupSlider (ampS); setupLabel (ampSL, "S");
     setupSlider (ampR); setupLabel (ampRL, "R");
 
-    ampA.setRange (0.005, 5.0); ampA.setSkewFactorFromMidPoint (0.3);
-    ampD.setRange (0.001, 5.0); ampD.setSkewFactorFromMidPoint (0.3);
-    ampS.setRange (0.0,   1.0);
-    ampR.setRange (0.02,  5.0); ampR.setSkewFactorFromMidPoint (0.5);
+    ampA.setRange (0.0, 5.0); ampA.setSkewFactorFromMidPoint (0.3);
+    ampD.setRange (0.0, 5.0); ampD.setSkewFactorFromMidPoint (0.3);
+    ampS.setRange (0.0, 1.0);
+    ampR.setRange (0.0, 5.0); ampR.setSkewFactorFromMidPoint (0.5);
 
     ampA.setValue (0.1);
     ampD.setValue (0.2);
@@ -53,10 +53,10 @@ void MainComponent::setupAmpWiring()
     setupSlider (env3S); setupLabel (env3SL, "S");
     setupSlider (env3R); setupLabel (env3RL, "R");
 
-    env3A.setRange (0.005, 5.0); env3A.setSkewFactorFromMidPoint (0.3);
-    env3D.setRange (0.001, 5.0); env3D.setSkewFactorFromMidPoint (0.3);
-    env3S.setRange (0.0,   1.0);
-    env3R.setRange (0.02,  5.0); env3R.setSkewFactorFromMidPoint (0.5);
+    env3A.setRange (0.0, 5.0); env3A.setSkewFactorFromMidPoint (0.3);
+    env3D.setRange (0.0, 5.0); env3D.setSkewFactorFromMidPoint (0.3);
+    env3S.setRange (0.0, 1.0);
+    env3R.setRange (0.0, 5.0); env3R.setSkewFactorFromMidPoint (0.5);
 
     env3A.setValue (0.1);
     env3D.setValue (0.2);
