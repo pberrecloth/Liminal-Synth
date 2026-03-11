@@ -37,8 +37,27 @@ public:
 
     void noteOn()
     {
+        attackTimeCounter = 0.0f;
+
+        // Zero attack: skip attack stage entirely — no 1-sample spike
+        if (params.attack == 0.0f)
+        {
+            currentLevel = 1.0f;
+            // Zero decay: also skip decay, land directly at sustain level
+            if (params.decay == 0.0f)
+            {
+                currentLevel = params.sustain;
+                stage = Stage::Sustain;
+            }
+            else
+            {
+                stage = Stage::Decay;
+            }
+            return;
+        }
+
+        // Normal attack: compute equivalent time position for smooth retrigger
         stage = Stage::Attack;
-        // Compute equivalent time position so retrigger starts from current level smoothly
         float attackSamples = juce::jmax (1.0f, params.attack * (float) sampleRate);
         float safeLevel = juce::jlimit (0.0f, 0.9999f, currentLevel);
         attackTimeCounter = -std::log (1.0f - safeLevel) * attackSamples / 6.908f;
@@ -82,6 +101,13 @@ public:
             }
             case Stage::Decay:
             {
+                // Zero decay: snap directly to sustain with no processing
+                if (params.decay == 0.0f)
+                {
+                    currentLevel = params.sustain;
+                    stage = Stage::Sustain;
+                    break;
+                }
                 float decaySamples = juce::jmax (1.0f, params.decay * (float) sampleRate);
                 float target = params.sustain;
                 // Exponential decay — fast drop then levels off at sustain
