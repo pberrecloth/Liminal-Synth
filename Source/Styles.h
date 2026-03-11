@@ -72,6 +72,45 @@ public:
     }
 
     //==========================================================================
+    void drawToggleButton (juce::Graphics& g,
+                           juce::ToggleButton& button,
+                           bool shouldDrawButtonAsHighlighted,
+                           bool /*shouldDrawButtonAsDown*/) override
+    {
+        const float h       = (float) button.getHeight();
+        const float boxSize = juce::jmin (h * 0.75f, 15.0f);
+        const float boxY    = (h - boxSize) * 0.5f;
+        const float boxX    = 2.0f;
+
+        juce::Rectangle<float> box (boxX, boxY, boxSize, boxSize);
+
+        // Box background
+        g.setColour (juce::Colour (0xff2a2a2a));
+        g.fillRoundedRectangle (box, 2.0f);
+
+        // Box border — highlight on hover
+        g.setColour (shouldDrawButtonAsHighlighted ? juce::Colour (0xff00c8ff).withAlpha (0.7f)
+                                                   : juce::Colour (0xff555555));
+        g.drawRoundedRectangle (box, 2.0f, 1.0f);
+
+        // Filled square when checked (cyan accent)
+        if (button.getToggleState())
+        {
+            g.setColour (juce::Colour (0xff00c8ff));
+            g.fillRoundedRectangle (box.reduced (3.5f), 1.0f);
+        }
+
+        // Label text
+        g.setColour (juce::Colour (0xffcccccc));
+        g.setFont (juce::jmin (12.0f, h * 0.65f));
+        g.drawText (button.getButtonText(),
+                    (int) (boxX + boxSize + 5.0f), 0,
+                    button.getWidth() - (int) (boxX + boxSize + 5.0f),
+                    button.getHeight(),
+                    juce::Justification::centredLeft, false);
+    }
+
+    //==========================================================================
     void drawButtonBackground (juce::Graphics& g,
                                juce::Button& button,
                                const juce::Colour& backgroundColour,
