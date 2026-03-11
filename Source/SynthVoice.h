@@ -369,6 +369,10 @@ public:
 
         lfo1DelayCounter = 0.0f;
 
+        // 2ms de-click ramp — smooths the waveform discontinuity at phase 0
+        deClickGain = 0.0f;
+        deClickInc  = 1.0f / juce::jmax (1.0f, (float) currentSampleRate * 0.002f);
+
         updateFilter1Cutoff();
         updateFilter2Cutoff();
 
@@ -554,7 +558,8 @@ public:
             float env = adsr.getNextSample();  // always advance so voice knows when to stop
             float ampGate = bypassAmpEnv.load() ? 1.0f : env;
 
-            out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * ampGate;
+            deClickGain = juce::jmin (1.0f, deClickGain + deClickInc);
+            out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * ampGate * deClickGain;
         }
 
         // Pan and write
@@ -689,6 +694,11 @@ private:
     float lfo1DelayMs      { 0.0f };
     int   lfo1Shape        { 0 };
     float lfo1DelayCounter { 0.0f };
+
+    // De-click ramp — 2ms linear fade-in on every note-on, independent of ADSR.
+    // Prevents hard step discontinuities from non-zero waveform values at phase reset.
+    float deClickGain { 1.0f };
+    float deClickInc  { 0.0f };
 
     float getLfo1Sample (int numSamples) noexcept
     {
