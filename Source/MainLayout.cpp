@@ -92,6 +92,10 @@ void MainComponent::layoutFilter (FilterSection& f, juce::Rectangle<int> area)
 
     area.removeFromTop (kGap);
 
+    // Env on/off toggle — sits in the 22px gap above the envelope knob row
+    f.envOn.setBounds (area.removeFromTop (16).removeFromLeft (60));
+    area.removeFromTop (6);
+
     auto row2 = area.removeFromTop (kKnob + kLabel);
     placeKnob (row2, f.envA,   f.envAL);
     placeKnob (row2, f.envD,   f.envDL);
@@ -230,9 +234,14 @@ void MainComponent::resized()
     col2Y += kFil3H + kPad;
 
     int envW = (col2W - kPad) / 2;
-    layoutEnv (juce::Rectangle<int> (col2X + kPad,            col2Y + 20,
-                                      envW - kPad * 2,         kEnvH - 24),
-               ampA, ampAL, ampD, ampDL, ampS, ampSL, ampR, ampRL);
+    {
+        auto ampArea = juce::Rectangle<int> (col2X + kPad, col2Y + 20,
+                                              envW - kPad * 2, kEnvH - 24);
+        // On/Off toggle to the right of the 4 knobs
+        auto ampOnCell = ampArea.removeFromRight (60);
+        ampEnvOn.setBounds (ampOnCell.withSizeKeepingCentre (60, 20));
+        layoutEnv (ampArea, ampA, ampAL, ampD, ampDL, ampS, ampSL, ampR, ampRL);
+    }
     layoutEnv (juce::Rectangle<int> (col2X + envW + kPad * 2, col2Y + 20,
                                       envW - kPad * 2,         kEnvH - 24),
                env3A, env3AL, env3D, env3DL, env3S, env3SL, env3R, env3RL);

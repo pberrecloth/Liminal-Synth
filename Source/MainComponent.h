@@ -55,6 +55,7 @@ private:
     juce::Label      patchNameLabel;
     static constexpr int topBarHeight = 36;
 
+
     void openAudioSettings();
     void openMidiSettings();
 
@@ -78,13 +79,14 @@ private:
     // Filters 1 & 2
     struct FilterSection
     {
-        juce::TextButton type { "LOW PASS" };
-        juce::Slider     cutoff, res, drive;
-        juce::Label      cutoffL, resL, driveL;
-        juce::Slider     envA, envD, envS, envR, envAmt;
-        juce::Label      envAL, envDL, envSL, envRL, envAmtL;
-        juce::Slider     keytrack, velocity;
-        juce::Label      keytrackL, velocityL;
+        juce::TextButton   type  { "LOW PASS" };
+        juce::ToggleButton envOn { "On/Off" };   // envelope active toggle
+        juce::Slider       cutoff, res, drive;
+        juce::Label        cutoffL, resL, driveL;
+        juce::Slider       envA, envD, envS, envR, envAmt;
+        juce::Label        envAL, envDL, envSL, envRL, envAmtL;
+        juce::Slider       keytrack, velocity;
+        juce::Label        keytrackL, velocityL;
     };
     FilterSection filter1, filter2;
 
@@ -99,6 +101,7 @@ private:
 
     //==========================================================================
     // Amp Env
+    juce::ToggleButton ampEnvOn { "On/Off" };  // amp envelope active toggle
     juce::Slider ampA, ampD, ampS, ampR;
     juce::Label  ampAL, ampDL, ampSL, ampRL;
 

@@ -3,6 +3,8 @@
 void MainComponent::setupFilter (FilterSection& f)
 {
     addAndMakeVisible (f.type);
+    addAndMakeVisible (f.envOn);
+    f.envOn.setToggleState (true, juce::dontSendNotification); // default: env active
     setupSlider (f.cutoff);   setupLabel (f.cutoffL,   "Cutoff");
     setupSlider (f.res);      setupLabel (f.resL,      "Res");
     setupSlider (f.drive);    setupLabel (f.driveL,    "Drive");
@@ -173,6 +175,24 @@ void MainComponent::setupFilterWiring()
                 if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
                     v->setFilter2Type (type);
         });
+    };
+
+    // ---- Filter env on/off toggles ----
+    filter1.envOn.onStateChange = [this]()
+    {
+        if (!engine.isReady) return;
+        bool bypassed = !filter1.envOn.getToggleState();
+        for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
+            if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
+                v->setFilter1EnvBypass (bypassed);
+    };
+    filter2.envOn.onStateChange = [this]()
+    {
+        if (!engine.isReady) return;
+        bool bypassed = !filter2.envOn.getToggleState();
+        for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
+            if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
+                v->setFilter2EnvBypass (bypassed);
     };
 
     // ---- Filter blend ----

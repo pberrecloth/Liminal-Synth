@@ -3,6 +3,17 @@
 void MainComponent::setupAmpWiring()
 {
     // ---- Amp Env ----
+    addAndMakeVisible (ampEnvOn);
+    ampEnvOn.setToggleState (true, juce::dontSendNotification); // default: env active
+    ampEnvOn.onStateChange = [this]()
+    {
+        if (!engine.isReady) return;
+        bool bypassed = !ampEnvOn.getToggleState();
+        for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
+            if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
+                v->setAmpEnvBypass (bypassed);
+    };
+
     setupSlider (ampA); setupLabel (ampAL, "A");
     setupSlider (ampD); setupLabel (ampDL, "D");
     setupSlider (ampS); setupLabel (ampSL, "S");

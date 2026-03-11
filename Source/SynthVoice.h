@@ -32,8 +32,11 @@ public:
 
     void noteOn()
     {
-        stage    = Stage::Attack;
-        // Start from current level for smooth retrigger
+        stage = Stage::Attack;
+        // Compute equivalent time position so retrigger starts from current level smoothly
+        float attackSamples = juce::jmax (1.0f, params.attack * (float) sampleRate);
+        float safeLevel = juce::jlimit (0.0f, 0.9999f, currentLevel);
+        attackTimeCounter = -std::log (1.0f - safeLevel) * attackSamples / 6.908f;
     }
 
     void noteOff()
@@ -47,8 +50,9 @@ public:
 
     void reset()
     {
-        stage        = Stage::Idle;
-        currentLevel = 0.0f;
+        stage             = Stage::Idle;
+        currentLevel      = 0.0f;
+        attackTimeCounter = 0.0f;
     }
 
     bool isActive() const { return stage != Stage::Idle; }
@@ -60,12 +64,14 @@ public:
             case Stage::Attack:
             {
                 float attackSamples = juce::jmax (1.0f, params.attack * (float) sampleRate);
-                // Exponential attack — fast start, slows as it approaches 1
-                currentLevel += (1.0f - currentLevel) * (1.0f - std::exp (-3.0f / attackSamples));
+                attackTimeCounter += 1.0f;
+                // Convex exponential — capacitor charging: slow start, accelerating bloom
+                currentLevel = 1.0f - std::exp (-attackTimeCounter * 6.908f / attackSamples);
                 if (currentLevel >= 0.999f)
                 {
-                    currentLevel = 1.0f;
-                    stage = Stage::Decay;
+                    currentLevel      = 1.0f;
+                    attackTimeCounter = 0.0f;
+                    stage             = Stage::Decay;
                 }
                 break;
             }
@@ -109,10 +115,11 @@ private:
     enum class Stage { Idle, Attack, Decay, Sustain, Release };
 
     Parameters params;
-    Stage      stage        { Stage::Idle };
-    float      currentLevel { 0.0f };
-    float      releaseLevel { 0.0f };
-    double     sampleRate   { 48000.0 };
+    Stage      stage             { Stage::Idle };
+    float      currentLevel      { 0.0f };
+    float      releaseLevel      { 0.0f };
+    float      attackTimeCounter { 0.0f };
+    double     sampleRate        { 48000.0 };
 };
 
 //==============================================================================
@@ -316,9 +323,10 @@ public:
         adsr.reset();       adsr.noteOn();
         filterEnv1.reset(); filterEnv1.noteOn();
         filterEnv2.reset(); filterEnv2.noteOn();
-        
-        DBG ("filter1EnvAmt=" << filter1EnvAmt << " atomicFilter1Amt=" << atomicFilter1Amt.load());
 
+        // Clear filter integrator state to prevent transient clicks on voice reuse
+        filter1.reset();       filter1series.reset();
+        filter2.reset();       filter2series.reset();
 
         lfo1DelayCounter = 0.0f;
 
@@ -444,28 +452,36 @@ public:
             float g3 = smoothedGain3.getNextValue();
             float mixed = osc1s * g1 + osc2s * g2 + osc3s * g3;
 
-            float drive = smoothedDrive1.getNextValue();
-            mixed = std::tanh (mixed * drive) / std::tanh (drive);
+            float drive1 = smoothedDrive1.getNextValue();
+            float drive2 = smoothedDrive2.getNextValue();
+            // Per-filter pre-saturation — each filter has its own drive character
+            float sat1 = std::tanh (mixed * drive1) / std::tanh (drive1);
+            float sat2 = std::tanh (mixed * drive2) / std::tanh (drive2);
 
-            float envMod1 = filterEnv1.getNextSample() * filter1EnvAmt * 20000.0f;
-            float envMod2 = filterEnv2.getNextSample() * filter2EnvAmt * 20000.0f;
+            float f1envSample = filterEnv1.getNextSample();
+            float f2envSample = filterEnv2.getNextSample();
+            float envMod1 = bypassFilter1Env.load() ? 0.0f : f1envSample * filter1EnvAmt * 20000.0f;
+            float envMod2 = bypassFilter2Env.load() ? 0.0f : f2envSample * filter2EnvAmt * 20000.0f;
             float cutoff1 = juce::jlimit (80.0f, maxCutoff, smoothedCutoff1.getNextValue() + envMod1);
             float cutoff2 = juce::jlimit (80.0f, maxCutoff, smoothedCutoff2.getNextValue() + envMod2);
 
+            // Parallel path
             filter1.setCutoffFrequency (cutoff1);
             filter2.setCutoffFrequency (cutoff2);
-            float f1out       = filter1.processSample (0, mixed);
-            float f2out       = filter2.processSample (0, mixed);
+            float f1out       = filter1.processSample (0, sat1);
+            float f2out       = filter2.processSample (0, sat2);
             float parallelOut = (f1out + f2out) * 0.5f;
 
+            // Series path: drive2 applied between the two stages
             filter1series.setCutoffFrequency (cutoff1);
             filter2series.setCutoffFrequency (cutoff2);
-            float seriesOut = filter1series.processSample (0, mixed);
+            float seriesOut = filter1series.processSample (0, sat1);
             seriesOut       = filter2series.processSample (0, seriesOut);
 
-            float env = adsr.getNextSample();
+            float env = adsr.getNextSample();  // always advance so voice knows when to stop
+            float ampGate = bypassAmpEnv.load() ? 1.0f : env;
 
-            out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * env;
+            out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * ampGate;
         }
 
         // Pan and write
@@ -535,6 +551,12 @@ public:
     }
 
     void setFilterBlend (float blend) { atomicFilterBlend = juce::jlimit (0.0f, 1.0f, blend); }
+
+    //==========================================================================
+    // Debug bypasses — isolate which envelope path is misbehaving
+    void setAmpEnvBypass     (bool b) { bypassAmpEnv     = b; }
+    void setFilter1EnvBypass (bool b) { bypassFilter1Env = b; }
+    void setFilter2EnvBypass (bool b) { bypassFilter2Env = b; }
 
 private:
     //==========================================================================
@@ -676,4 +698,9 @@ private:
 
     // Filter blend
     std::atomic<float> atomicFilterBlend { 1.0f };
+
+    // Debug bypass flags
+    std::atomic<bool> bypassAmpEnv     { false };
+    std::atomic<bool> bypassFilter1Env { false };
+    std::atomic<bool> bypassFilter2Env { false };
 };
