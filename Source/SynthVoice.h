@@ -382,9 +382,10 @@ public:
         float freq1 = 440.0f * std::pow (2.0f, ((float)(currentMidiNote + tuningOct  * 12 + tuningSemi)  + tuningFine  / 100.0f - 69.0f) / 12.0f) * lfo1PitchMult;
         float freq2 = 440.0f * std::pow (2.0f, ((float)(currentMidiNote + tuningOct2 * 12 + tuningSemi2) + tuningFine2 / 100.0f - 69.0f) / 12.0f) * lfo1PitchMult;
         float freq3 = 440.0f * std::pow (2.0f, ((float)(currentMidiNote + tuningOct3 * 12 + tuningSemi3) + tuningFine3 / 100.0f - 69.0f) / 12.0f) * lfo1PitchMult;
-        oscA.setFrequency (freq1); oscB.setFrequency (freq1);
-        oscC.setFrequency (freq2); oscD.setFrequency (freq2);
-        oscE.setFrequency (freq3); oscF.setFrequency (freq3);
+        // Set frequency every block
+        oscA.setFrequency (freq1, true); oscB.setFrequency (freq1, true);
+        oscC.setFrequency (freq2, true); oscD.setFrequency (freq2, true);
+        oscE.setFrequency (freq3, true); oscF.setFrequency (freq3, true);
 
         auto bufA = renderOsc (oscA, isNoiseA);
         auto bufB = renderOsc (oscB, isNoiseB);
@@ -564,8 +565,8 @@ private:
     {
         float totalSemitones = (float)(note + oct * 12 + semi) + fine / 100.0f;
         float freq = 440.0f * std::pow (2.0f, (totalSemitones - 69.0f) / 12.0f);
-        oscX.setFrequency (freq);
-        oscY.setFrequency (freq);
+        oscX.setFrequency (freq, true);
+        oscY.setFrequency (freq, true);
     }
 
     void updateFilter1Cutoff()
