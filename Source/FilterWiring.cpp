@@ -3,6 +3,8 @@
 void MainComponent::setupFilter (FilterSection& f)
 {
     addAndMakeVisible (f.type);
+    addAndMakeVisible (f.envOn);
+    f.envOn.setToggleState (true, juce::dontSendNotification); // default: env active
     setupSlider (f.cutoff);   setupLabel (f.cutoffL,   "Cutoff");
     setupSlider (f.res);      setupLabel (f.resL,      "Res");
     setupSlider (f.drive);    setupLabel (f.driveL,    "Drive");
@@ -54,10 +56,10 @@ void MainComponent::setupFilterWiring()
     filter1.keytrack.setRange (0.0,  1.0);     filter1.keytrack.setValue (0.0);
     filter1.velocity.setRange (0.0,  1.0);     filter1.velocity.setValue (0.0);
 
-    filter1.envA.setRange (0.005, 5.0); filter1.envA.setSkewFactorFromMidPoint (0.3); filter1.envA.setValue (0.1);
-    filter1.envD.setRange (0.001, 5.0); filter1.envD.setSkewFactorFromMidPoint (0.3); filter1.envD.setValue (0.2);
-    filter1.envS.setRange (0.0,   1.0);                                               filter1.envS.setValue (0.7);
-    filter1.envR.setRange (0.02,  5.0); filter1.envR.setSkewFactorFromMidPoint (0.5); filter1.envR.setValue (0.4);
+    filter1.envA.setRange (0.0, 5.0); filter1.envA.setSkewFactorFromMidPoint (0.3); filter1.envA.setValue (0.1);
+    filter1.envD.setRange (0.0, 5.0); filter1.envD.setSkewFactorFromMidPoint (0.3); filter1.envD.setValue (0.2);
+    filter1.envS.setRange (0.0, 1.0);                                                filter1.envS.setValue (0.7);
+    filter1.envR.setRange (0.0, 5.0); filter1.envR.setSkewFactorFromMidPoint (0.5); filter1.envR.setValue (0.4);
     filter1.envAmt.setRange (-1.0, 1.0);                                              filter1.envAmt.setValue (0.0);
 
     auto updateFilter1 = [this]()
@@ -119,10 +121,10 @@ void MainComponent::setupFilterWiring()
     filter2.keytrack.setRange (0.0,  1.0);     filter2.keytrack.setValue (0.0);
     filter2.velocity.setRange (0.0,  1.0);     filter2.velocity.setValue (0.0);
 
-    filter2.envA.setRange (0.005, 5.0); filter2.envA.setSkewFactorFromMidPoint (0.3); filter2.envA.setValue (0.1);
-    filter2.envD.setRange (0.001, 5.0); filter2.envD.setSkewFactorFromMidPoint (0.3); filter2.envD.setValue (0.2);
-    filter2.envS.setRange (0.0,   1.0);                                               filter2.envS.setValue (0.7);
-    filter2.envR.setRange (0.02,  5.0); filter2.envR.setSkewFactorFromMidPoint (0.5); filter2.envR.setValue (0.4);
+    filter2.envA.setRange (0.0, 5.0); filter2.envA.setSkewFactorFromMidPoint (0.3); filter2.envA.setValue (0.1);
+    filter2.envD.setRange (0.0, 5.0); filter2.envD.setSkewFactorFromMidPoint (0.3); filter2.envD.setValue (0.2);
+    filter2.envS.setRange (0.0, 1.0);                                                filter2.envS.setValue (0.7);
+    filter2.envR.setRange (0.0, 5.0); filter2.envR.setSkewFactorFromMidPoint (0.5); filter2.envR.setValue (0.4);
     filter2.envAmt.setRange (-1.0, 1.0);                                              filter2.envAmt.setValue (0.0);
 
     auto updateFilter2 = [this]()
@@ -173,6 +175,24 @@ void MainComponent::setupFilterWiring()
                 if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
                     v->setFilter2Type (type);
         });
+    };
+
+    // ---- Filter env on/off toggles ----
+    filter1.envOn.onStateChange = [this]()
+    {
+        if (!engine.isReady) return;
+        bool bypassed = !filter1.envOn.getToggleState();
+        for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
+            if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
+                v->setFilter1EnvBypass (bypassed);
+    };
+    filter2.envOn.onStateChange = [this]()
+    {
+        if (!engine.isReady) return;
+        bool bypassed = !filter2.envOn.getToggleState();
+        for (int i = 0; i < engine.synthesiser.getNumVoices(); ++i)
+            if (auto* v = dynamic_cast<SynthVoice*> (engine.synthesiser.getVoice (i)))
+                v->setFilter2EnvBypass (bypassed);
     };
 
     // ---- Filter blend ----

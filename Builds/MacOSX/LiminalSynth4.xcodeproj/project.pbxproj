@@ -41,6 +41,7 @@
 		C8C30632D0731BD8221E0BB1 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A49AEC6E0BA3686D03AF6460 /* CoreAudio.framework */; };
 		CA120D1D43DE8B3E58828693 /* MainComponent.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7453BD1622597CB277A10B70 /* MainComponent.cpp */; };
 		CF3FA7313FFCED405B66C85C /* include_juce_data_structures.mm in Sources */ = {isa = PBXBuildFile; fileRef = 92FB8F48B9FDC015BF4137D3 /* include_juce_data_structures.mm */; };
+		D0F138F82F61CA2B002EB66D /* original-claude-chat.md in Resources */ = {isa = PBXBuildFile; fileRef = D0F138F72F61CA17002EB66D /* original-claude-chat.md */; };
 		D220CC64FE8A5524A7BF153A /* include_juce_audio_utils.mm in Sources */ = {isa = PBXBuildFile; fileRef = 60B2C2599A65397F7DCE0155 /* include_juce_audio_utils.mm */; };
 		D45A3E424F26DAA1754BE3B2 /* include_juce_gui_basics.mm in Sources */ = {isa = PBXBuildFile; fileRef = EB75F82D324BEDAC9C1E46C9 /* include_juce_gui_basics.mm */; };
 		E7D2772BCD54BE5DBEA664F9 /* FilterWiring.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4AAA3156A81DA0BBFAA5092D /* FilterWiring.cpp */; };
@@ -107,6 +108,7 @@
 		BE855839B476ED98708F429E /* juce_gui_extra */ = {isa = PBXFileReference; lastKnownFileType = folder; name = juce_gui_extra; path = /Users/peter/Developer/JUCE/modules/juce_gui_extra; sourceTree = "<absolute>"; };
 		C431EA214E2D243A3CB19739 /* CoreAudioKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudioKit.framework; path = System/Library/Frameworks/CoreAudioKit.framework; sourceTree = SDKROOT; };
 		CCF843E9FD81BD1E38ACDF8D /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		D0F138F72F61CA17002EB66D /* original-claude-chat.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "original-claude-chat.md"; sourceTree = "<group>"; };
 		D4AAE288F359933266866378 /* Main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Main.cpp; path = ../../Source/Main.cpp; sourceTree = SOURCE_ROOT; };
 		DA75909A6FB6A9C77A36719E /* OscWiring.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OscWiring.cpp; path = ../../Source/OscWiring.cpp; sourceTree = SOURCE_ROOT; };
 		DC6E01D444B8493F55CD3DFD /* EffectsChain.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = EffectsChain.h; path = ../../Source/EffectsChain.h; sourceTree = SOURCE_ROOT; };
@@ -241,6 +243,7 @@
 		724C97B22AA1B05E58331485 /* LiminalSynth4 */ = {
 			isa = PBXGroup;
 			children = (
+				D0F138F72F61CA17002EB66D /* original-claude-chat.md */,
 				0E63D6A85017820A44DF51C7 /* Source */,
 			);
 			name = LiminalSynth4;
@@ -344,6 +347,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F54365877A6E1923BDEE689B /* RecentFilesMenuTemplate.nib in Resources */,
+				D0F138F82F61CA2B002EB66D /* original-claude-chat.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

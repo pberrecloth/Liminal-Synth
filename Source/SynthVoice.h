@@ -2,6 +2,9 @@
 
 #include <JuceHeader.h>
 
+// Set to 1 to enable ADSR debug logging on every note-on. Set to 0 to disable.
+#define ADSR_DEBUG_MODE 0
+
 //==============================================================================
 // Curved ADSR — exponential attack/decay/release, linear sustain
 // Replaces juce::ADSR with natural-feeling analogue-style curves
@@ -21,6 +24,8 @@ public:
 
     void setParameters (const Parameters& p) { params = p; }
 
+    Parameters getParameters() const { return params; }
+
     // Compatible with juce::ADSR::Parameters
     void setParameters (const juce::ADSR::Parameters& p)
     {
@@ -32,8 +37,30 @@ public:
 
     void noteOn()
     {
-        stage    = Stage::Attack;
-        // Start from current level for smooth retrigger
+        attackTimeCounter = 0.0f;
+
+        // Zero attack: skip attack stage entirely — no 1-sample spike
+        if (params.attack == 0.0f)
+        {
+            currentLevel = 1.0f;
+            // Zero decay: also skip decay, land directly at sustain level
+            if (params.decay == 0.0f)
+            {
+                currentLevel = params.sustain;
+                stage = Stage::Sustain;
+            }
+            else
+            {
+                stage = Stage::Decay;
+            }
+            return;
+        }
+
+        // Normal attack: compute equivalent time position for smooth retrigger
+        stage = Stage::Attack;
+        float attackSamples = juce::jmax (1.0f, params.attack * (float) sampleRate);
+        float safeLevel = juce::jlimit (0.0f, 0.9999f, currentLevel);
+        attackTimeCounter = -std::log (1.0f - safeLevel) * attackSamples / 6.908f;
     }
 
     void noteOff()
@@ -47,8 +74,9 @@ public:
 
     void reset()
     {
-        stage        = Stage::Idle;
-        currentLevel = 0.0f;
+        stage             = Stage::Idle;
+        currentLevel      = 0.0f;
+        attackTimeCounter = 0.0f;
     }
 
     bool isActive() const { return stage != Stage::Idle; }
@@ -60,17 +88,26 @@ public:
             case Stage::Attack:
             {
                 float attackSamples = juce::jmax (1.0f, params.attack * (float) sampleRate);
-                // Exponential attack — fast start, slows as it approaches 1
-                currentLevel += (1.0f - currentLevel) * (1.0f - std::exp (-3.0f / attackSamples));
+                attackTimeCounter += 1.0f;
+                // Convex exponential — capacitor charging: slow start, accelerating bloom
+                currentLevel = 1.0f - std::exp (-attackTimeCounter * 6.908f / attackSamples);
                 if (currentLevel >= 0.999f)
                 {
-                    currentLevel = 1.0f;
-                    stage = Stage::Decay;
+                    currentLevel      = 1.0f;
+                    attackTimeCounter = 0.0f;
+                    stage             = Stage::Decay;
                 }
                 break;
             }
             case Stage::Decay:
             {
+                // Zero decay: snap directly to sustain with no processing
+                if (params.decay == 0.0f)
+                {
+                    currentLevel = params.sustain;
+                    stage = Stage::Sustain;
+                    break;
+                }
                 float decaySamples = juce::jmax (1.0f, params.decay * (float) sampleRate);
                 float target = params.sustain;
                 // Exponential decay — fast drop then levels off at sustain
@@ -88,7 +125,9 @@ public:
 
             case Stage::Release:
             {
-                float releaseSamples = juce::jmax (1.0f, params.release * (float) sampleRate);
+                // Minimum 5ms de-click floor — prevents hard cuts even when R=0
+                float minRelease    = (float) sampleRate * 0.005f;
+                float releaseSamples = juce::jmax (minRelease, params.release * (float) sampleRate);
                 // Exponential release — natural fade to silence
                 currentLevel += (0.0f - currentLevel) * (1.0f - std::exp (-3.0f / releaseSamples));
                 if (currentLevel < 0.0001f)
@@ -109,10 +148,11 @@ private:
     enum class Stage { Idle, Attack, Decay, Sustain, Release };
 
     Parameters params;
-    Stage      stage        { Stage::Idle };
-    float      currentLevel { 0.0f };
-    float      releaseLevel { 0.0f };
-    double     sampleRate   { 48000.0 };
+    Stage      stage             { Stage::Idle };
+    float      currentLevel      { 0.0f };
+    float      releaseLevel      { 0.0f };
+    float      attackTimeCounter { 0.0f };
+    double     sampleRate        { 48000.0 };
 };
 
 //==============================================================================
@@ -316,14 +356,59 @@ public:
         adsr.reset();       adsr.noteOn();
         filterEnv1.reset(); filterEnv1.noteOn();
         filterEnv2.reset(); filterEnv2.noteOn();
-        
-        DBG ("filter1EnvAmt=" << filter1EnvAmt << " atomicFilter1Amt=" << atomicFilter1Amt.load());
 
+        // Reset oscillator phases to zero — prevents start click when A=0 and
+        // oscillators are frozen mid-cycle from a previous note
+        oscA.reset(); oscB.reset();
+        oscC.reset(); oscD.reset();
+        oscE.reset(); oscF.reset();
+
+        // Clear filter integrator state to prevent transient clicks on voice reuse
+        filter1.reset();       filter1series.reset();
+        filter2.reset();       filter2series.reset();
 
         lfo1DelayCounter = 0.0f;
 
+        // 2ms de-click ramp — smooths the waveform discontinuity at phase 0
+        deClickGain = 0.0f;
+        deClickInc  = 1.0f / juce::jmax (1.0f, (float) currentSampleRate * 0.002f);
+
         updateFilter1Cutoff();
         updateFilter2Cutoff();
+
+       #if ADSR_DEBUG_MODE
+        {
+            static const char* noteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+            juce::String noteName = juce::String (noteNames[midiNoteNumber % 12])
+                                  + juce::String (midiNoteNumber / 12 - 1);
+
+            auto ap = adsr.getParameters();
+            auto f1 = CurvedADSR::Parameters { atomicFilterEnvA.load(), atomicFilterEnvD.load(),
+                                               atomicFilterEnvS.load(), atomicFilterEnvR.load() };
+            auto f2 = CurvedADSR::Parameters { atomicFilterEnv2A.load(), atomicFilterEnv2D.load(),
+                                               atomicFilterEnv2S.load(), atomicFilterEnv2R.load() };
+
+            DBG ("[ADSR] Note " + noteName + " (" + juce::String (midiNoteNumber) + ")"
+                 + "  vel=" + juce::String (currentVelocityRaw, 2)
+                 + "  AMP  A=" + juce::String (ap.attack,  3)
+                 + " D="       + juce::String (ap.decay,   3)
+                 + " S="       + juce::String (ap.sustain, 3)
+                 + " R="       + juce::String (ap.release, 3)
+                 + (bypassAmpEnv.load() ? " [BYPASSED]" : "")
+                 + "  |  F1  A=" + juce::String (f1.attack,  3)
+                 + " D="         + juce::String (f1.decay,   3)
+                 + " S="         + juce::String (f1.sustain, 3)
+                 + " R="         + juce::String (f1.release, 3)
+                 + " Amt="       + juce::String (atomicFilter1Amt.load(), 2)
+                 + (bypassFilter1Env.load() ? " [BYPASSED]" : "")
+                 + "  |  F2  A=" + juce::String (f2.attack,  3)
+                 + " D="         + juce::String (f2.decay,   3)
+                 + " S="         + juce::String (f2.sustain, 3)
+                 + " R="         + juce::String (f2.release, 3)
+                 + " Amt="       + juce::String (atomicFilter2Amt.load(), 2)
+                 + (bypassFilter2Env.load() ? " [BYPASSED]" : ""));
+        }
+       #endif
     }
 
     void stopNote (float, bool allowTailOff) override
@@ -444,28 +529,37 @@ public:
             float g3 = smoothedGain3.getNextValue();
             float mixed = osc1s * g1 + osc2s * g2 + osc3s * g3;
 
-            float drive = smoothedDrive1.getNextValue();
-            mixed = std::tanh (mixed * drive) / std::tanh (drive);
+            float drive1 = smoothedDrive1.getNextValue();
+            float drive2 = smoothedDrive2.getNextValue();
+            // Per-filter pre-saturation — each filter has its own drive character
+            float sat1 = std::tanh (mixed * drive1) / std::tanh (drive1);
+            float sat2 = std::tanh (mixed * drive2) / std::tanh (drive2);
 
-            float envMod1 = filterEnv1.getNextSample() * filter1EnvAmt * 20000.0f;
-            float envMod2 = filterEnv2.getNextSample() * filter2EnvAmt * 20000.0f;
+            float f1envSample = filterEnv1.getNextSample();
+            float f2envSample = filterEnv2.getNextSample();
+            float envMod1 = bypassFilter1Env.load() ? 0.0f : f1envSample * filter1EnvAmt * 20000.0f;
+            float envMod2 = bypassFilter2Env.load() ? 0.0f : f2envSample * filter2EnvAmt * 20000.0f;
             float cutoff1 = juce::jlimit (80.0f, maxCutoff, smoothedCutoff1.getNextValue() + envMod1);
             float cutoff2 = juce::jlimit (80.0f, maxCutoff, smoothedCutoff2.getNextValue() + envMod2);
 
+            // Parallel path
             filter1.setCutoffFrequency (cutoff1);
             filter2.setCutoffFrequency (cutoff2);
-            float f1out       = filter1.processSample (0, mixed);
-            float f2out       = filter2.processSample (0, mixed);
+            float f1out       = filter1.processSample (0, sat1);
+            float f2out       = filter2.processSample (0, sat2);
             float parallelOut = (f1out + f2out) * 0.5f;
 
+            // Series path: drive2 applied between the two stages
             filter1series.setCutoffFrequency (cutoff1);
             filter2series.setCutoffFrequency (cutoff2);
-            float seriesOut = filter1series.processSample (0, mixed);
+            float seriesOut = filter1series.processSample (0, sat1);
             seriesOut       = filter2series.processSample (0, seriesOut);
 
-            float env = adsr.getNextSample();
+            float env = adsr.getNextSample();  // always advance so voice knows when to stop
+            float ampGate = bypassAmpEnv.load() ? 1.0f : env;
 
-            out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * env;
+            deClickGain = juce::jmin (1.0f, deClickGain + deClickInc);
+            out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * ampGate * deClickGain;
         }
 
         // Pan and write
@@ -536,6 +630,12 @@ public:
 
     void setFilterBlend (float blend) { atomicFilterBlend = juce::jlimit (0.0f, 1.0f, blend); }
 
+    //==========================================================================
+    // Debug bypasses — isolate which envelope path is misbehaving
+    void setAmpEnvBypass     (bool b) { bypassAmpEnv     = b; }
+    void setFilter1EnvBypass (bool b) { bypassFilter1Env = b; }
+    void setFilter2EnvBypass (bool b) { bypassFilter2Env = b; }
+
 private:
     //==========================================================================
     void applyWaveform (juce::dsp::Oscillator<float>& osc, Waveform w)
@@ -594,6 +694,11 @@ private:
     float lfo1DelayMs      { 0.0f };
     int   lfo1Shape        { 0 };
     float lfo1DelayCounter { 0.0f };
+
+    // De-click ramp — 2ms linear fade-in on every note-on, independent of ADSR.
+    // Prevents hard step discontinuities from non-zero waveform values at phase reset.
+    float deClickGain { 1.0f };
+    float deClickInc  { 0.0f };
 
     float getLfo1Sample (int numSamples) noexcept
     {
@@ -676,4 +781,9 @@ private:
 
     // Filter blend
     std::atomic<float> atomicFilterBlend { 1.0f };
+
+    // Debug bypass flags
+    std::atomic<bool> bypassAmpEnv     { false };
+    std::atomic<bool> bypassFilter1Env { false };
+    std::atomic<bool> bypassFilter2Env { false };
 };
