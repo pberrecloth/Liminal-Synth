@@ -125,7 +125,9 @@ public:
 
             case Stage::Release:
             {
-                float releaseSamples = juce::jmax (1.0f, params.release * (float) sampleRate);
+                // Minimum 5ms de-click floor — prevents hard cuts even when R=0
+                float minRelease    = (float) sampleRate * 0.005f;
+                float releaseSamples = juce::jmax (minRelease, params.release * (float) sampleRate);
                 // Exponential release — natural fade to silence
                 currentLevel += (0.0f - currentLevel) * (1.0f - std::exp (-3.0f / releaseSamples));
                 if (currentLevel < 0.0001f)
@@ -354,6 +356,12 @@ public:
         adsr.reset();       adsr.noteOn();
         filterEnv1.reset(); filterEnv1.noteOn();
         filterEnv2.reset(); filterEnv2.noteOn();
+
+        // Reset oscillator phases to zero — prevents start click when A=0 and
+        // oscillators are frozen mid-cycle from a previous note
+        oscA.reset(); oscB.reset();
+        oscC.reset(); oscD.reset();
+        oscE.reset(); oscF.reset();
 
         // Clear filter integrator state to prevent transient clicks on voice reuse
         filter1.reset();       filter1series.reset();
