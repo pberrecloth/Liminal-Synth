@@ -2,6 +2,9 @@
 
 #include <JuceHeader.h>
 
+// Set to 1 to enable ADSR debug logging on every note-on. Set to 0 to disable.
+#define ADSR_DEBUG_MODE 0
+
 //==============================================================================
 // Curved ADSR — exponential attack/decay/release, linear sustain
 // Replaces juce::ADSR with natural-feeling analogue-style curves
@@ -20,6 +23,8 @@ public:
     void setSampleRate (double sr) { sampleRate = sr; }
 
     void setParameters (const Parameters& p) { params = p; }
+
+    Parameters getParameters() const { return params; }
 
     // Compatible with juce::ADSR::Parameters
     void setParameters (const juce::ADSR::Parameters& p)
@@ -332,6 +337,40 @@ public:
 
         updateFilter1Cutoff();
         updateFilter2Cutoff();
+
+       #if ADSR_DEBUG_MODE
+        {
+            static const char* noteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+            juce::String noteName = juce::String (noteNames[midiNoteNumber % 12])
+                                  + juce::String (midiNoteNumber / 12 - 1);
+
+            auto ap = adsr.getParameters();
+            auto f1 = CurvedADSR::Parameters { atomicFilterEnvA.load(), atomicFilterEnvD.load(),
+                                               atomicFilterEnvS.load(), atomicFilterEnvR.load() };
+            auto f2 = CurvedADSR::Parameters { atomicFilterEnv2A.load(), atomicFilterEnv2D.load(),
+                                               atomicFilterEnv2S.load(), atomicFilterEnv2R.load() };
+
+            DBG ("[ADSR] Note " + noteName + " (" + juce::String (midiNoteNumber) + ")"
+                 + "  vel=" + juce::String (currentVelocityRaw, 2)
+                 + "  AMP  A=" + juce::String (ap.attack,  3)
+                 + " D="       + juce::String (ap.decay,   3)
+                 + " S="       + juce::String (ap.sustain, 3)
+                 + " R="       + juce::String (ap.release, 3)
+                 + (bypassAmpEnv.load() ? " [BYPASSED]" : "")
+                 + "  |  F1  A=" + juce::String (f1.attack,  3)
+                 + " D="         + juce::String (f1.decay,   3)
+                 + " S="         + juce::String (f1.sustain, 3)
+                 + " R="         + juce::String (f1.release, 3)
+                 + " Amt="       + juce::String (atomicFilter1Amt.load(), 2)
+                 + (bypassFilter1Env.load() ? " [BYPASSED]" : "")
+                 + "  |  F2  A=" + juce::String (f2.attack,  3)
+                 + " D="         + juce::String (f2.decay,   3)
+                 + " S="         + juce::String (f2.sustain, 3)
+                 + " R="         + juce::String (f2.release, 3)
+                 + " Amt="       + juce::String (atomicFilter2Amt.load(), 2)
+                 + (bypassFilter2Env.load() ? " [BYPASSED]" : ""));
+        }
+       #endif
     }
 
     void stopNote (float, bool allowTailOff) override
