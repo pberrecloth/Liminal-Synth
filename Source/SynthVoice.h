@@ -35,16 +35,6 @@ public:
     void noteOn()
     {
         attackTimeCounter = 0.0f;
-
-        // Zero-shortcut: if attack is 0, skip straight to sustain/decay
-        if (params.attack == 0.0f)
-        {
-            currentLevel = 1.0f;
-            if (params.decay == 0.0f) { currentLevel = params.sustain; stage = Stage::Sustain; }
-            else                      { stage = Stage::Decay; }
-            return;
-        }
-
         stage = Stage::Attack;
         // Compute equivalent time position so retrigger starts from current level smoothly
         float attackSamples = juce::jmax (1.0f, params.attack * (float) sampleRate);
@@ -66,7 +56,6 @@ public:
         stage             = Stage::Idle;
         currentLevel      = 0.0f;
         attackTimeCounter = 0.0f;
-        quickReleaseActive = false;
     }
 
     bool isActive() const { return stage != Stage::Idle; }
@@ -110,17 +99,12 @@ public:
 
             case Stage::Release:
             {
-                // Minimum floor: 2ms for quick-release (voice steal), 5ms for user release (prevents click at R=0)
-                float minRelease     = (float) sampleRate * (quickReleaseActive ? 0.002f : 0.005f);
-                float releaseSamples = quickReleaseActive
-                                         ? minRelease
-                                         : juce::jmax (minRelease, params.release * (float) sampleRate);
+                float releaseSamples = juce::jmax (1.0f, params.release * (float) sampleRate);
                 currentLevel += (0.0f - currentLevel) * (1.0f - std::exp (-3.0f / releaseSamples));
                 if (currentLevel < 0.0001f)
                 {
-                    currentLevel       = 0.0f;
-                    quickReleaseActive = false;
-                    stage              = Stage::Idle;
+                    currentLevel = 0.0f;
+                    stage        = Stage::Idle;
                 }
                 break;
             }
@@ -135,12 +119,11 @@ private:
     enum class Stage { Idle, Attack, Decay, Sustain, Release };
 
     Parameters params;
-    Stage      stage              { Stage::Idle };
-    float      currentLevel       { 0.0f };
-    float      releaseLevel       { 0.0f };
-    float      attackTimeCounter  { 0.0f };
-    bool       quickReleaseActive { false };
-    double     sampleRate         { 48000.0 };
+    Stage      stage             { Stage::Idle };
+    float      currentLevel      { 0.0f };
+    float      releaseLevel      { 0.0f };
+    float      attackTimeCounter { 0.0f };
+    double     sampleRate        { 48000.0 };
 };
 
 //==============================================================================
@@ -340,31 +323,11 @@ public:
         retune (oscC, oscD, midiNoteNumber, tuningOct2, tuningSemi2, tuningFine2);
         retune (oscE, oscF, midiNoteNumber, tuningOct3, tuningSemi3, tuningFine3);
 
-        bool wasStolen = adsr.isActive(); // true when JUCE is stealing a releasing voice
-
-        if (wasStolen)
-        {
-            // Voice steal: preserve envelope levels and filter state for a click-free handoff.
-            // The ADSR continues from its current release level straight into a new attack.
-            adsr.noteOn();
-            filterEnv1.noteOn();
-            filterEnv2.noteOn();
-            // Filters keep integrator state — no state discontinuity
-            deClickGain = 1.0f;
-            deClickInc  = 0.0f;
-        }
-        else
-        {
-            // Fresh voice: full reset for a clean start
-            adsr.reset();       adsr.noteOn();
-            filterEnv1.reset(); filterEnv1.noteOn();
-            filterEnv2.reset(); filterEnv2.noteOn();
-            filter1.reset();       filter1series.reset();
-            filter2.reset();       filter2series.reset();
-            // 2ms fade-in ramp to mask oscillator phase discontinuity
-            deClickGain = 0.0f;
-            deClickInc  = 1.0f / juce::jmax (1.0f, (float) currentSampleRate * 0.002f);
-        }
+        adsr.reset();       adsr.noteOn();
+        filterEnv1.reset(); filterEnv1.noteOn();
+        filterEnv2.reset(); filterEnv2.noteOn();
+        filter1.reset();    filter1series.reset();
+        filter2.reset();    filter2series.reset();
 
         lfo1DelayCounter = 0.0f;
 
@@ -382,9 +345,9 @@ public:
         }
         else
         {
-            // Voice steal: just release JUCE ownership.
-            // Audio state (ADSR level, filter integrators) carries over into the new startNote
-            // so the incoming note begins from the outgoing level — no hard cut, no click.
+            adsr.reset();
+            filterEnv1.reset();
+            filterEnv2.reset();
             clearCurrentNote();
         }
     }
@@ -519,10 +482,7 @@ public:
             float env = adsr.getNextSample();  // always advance so voice knows when to stop
             float ampGate = bypassAmpEnv.load() ? 1.0f : env;
 
-            if (deClickGain < 1.0f)
-                deClickGain = juce::jmin (1.0f, deClickGain + deClickInc);
-
-            out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * ampGate * deClickGain;
+            out[i] = (parallelOut * (1.0f - blend) + seriesOut * blend) * ampGate;
         }
 
         // Pan and write
@@ -745,8 +705,4 @@ private:
     std::atomic<bool> bypassFilter1Env { false };
     std::atomic<bool> bypassFilter2Env { false };
 
-    // Note-on de-click: 2ms linear fade-in on fresh starts to mask oscillator phase discontinuity.
-    // Set to 1.0 / inc=0.0 for voice-steal starts (amplitude continuity from ADSR carry-over).
-    float deClickGain { 1.0f };
-    float deClickInc  { 0.0f };
 };
